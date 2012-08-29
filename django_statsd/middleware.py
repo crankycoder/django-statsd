@@ -1,4 +1,4 @@
-from django_statsd.clients import statsd
+from django_statsd.clients import metlog_client
 import inspect
 import time
 
@@ -6,19 +6,19 @@ import time
 class GraphiteMiddleware(object):
 
     def process_response(self, request, response):
-        statsd.incr('response.%s' % response.status_code)
+        metlog_client.incr('response.%s' % response.status_code)
         if hasattr(request, 'user') and request.user.is_authenticated():
-            statsd.incr('response.auth.%s' % response.status_code)
+            metlog_client.incr('response.auth.%s' % response.status_code)
         return response
 
     def process_exception(self, request, exception):
-        statsd.incr('response.500')
+        metlog_client.incr('response.500')
         if hasattr(request, 'user') and request.user.is_authenticated():
-            statsd.incr('response.auth.500')
+            metlog_client.incr('response.auth.500')
 
 
 class GraphiteRequestTimingMiddleware(object):
-    """statsd's timing data per view."""
+    """metlog's timing data per view."""
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         view = view_func
@@ -43,6 +43,6 @@ class GraphiteRequestTimingMiddleware(object):
             ms = int((time.time() - request._start_time) * 1000)
             data = dict(module=request._view_module, name=request._view_name,
                         method=request.method)
-            statsd.timing('view.{module}.{name}.{method}'.format(**data), ms)
-            statsd.timing('view.{module}.{method}'.format(**data), ms)
-            statsd.timing('view.{method}'.format(**data), ms)
+            metlog_client.timer_send('view.{module}.{name}.{method}'.format(**data), ms)
+            metlog_client.timer_send('view.{module}.{method}'.format(**data), ms)
+            metlog_client.timer_send('view.{method}'.format(**data), ms)

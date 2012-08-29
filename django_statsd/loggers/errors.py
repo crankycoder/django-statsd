@@ -1,6 +1,6 @@
 import logging
 
-from django_statsd.clients import statsd
+from django_statsd.clients import metlog_client
 
 
 class StatsdHandler(logging.Handler):
@@ -10,4 +10,4 @@ class StatsdHandler(logging.Handler):
         if not record.exc_info:
             return
 
-        statsd.incr('error.%s' % record.exc_info[0].__name__.lower())
+        metlog_client.incr('error.%s' % record.exc_info[0].__name__.lower())

@@ -3,7 +3,7 @@ from django.template.loader import render_to_string
 from django.utils.translation import ugettext_lazy as _, ungettext
 
 from debug_toolbar.panels import DebugPanel
-from django_statsd.clients import statsd
+from django_statsd.clients import metlog_client
 
 
 def munge(stats):
@@ -37,25 +37,23 @@ def times(stats):
     return results
 
 
-class StatsdPanel(DebugPanel):
+class MetlogPanel(DebugPanel):
+    """
+    TODO: (vng) This panel is broken 
+    """
 
-    name = 'Statsd'
+    name = 'Metlog'
     has_content = True
 
     def __init__(self, *args, **kw):
-        super(StatsdPanel, self).__init__(*args, **kw)
-        self.statsd = statsd
-        try:
-            self.statsd.reset()
-        except AttributeError:
-            raise ValueError('To use the toolbar, your STATSD_CLIENT must'
-                             'be set to django_statsd.clients.toolbar')
+        super(MetlogPanel, self).__init__(*args, **kw)
+        self.metlog_client = metlog_client
 
     def nav_title(self):
-        return _('Statsd')
+        return _('metlog')
 
     def nav_subtitle(self):
-        length = len(self.statsd.cache) + len(self.statsd.timings)
+        length = len(self.metlog_client.cache) + len(self.metlog_client.timings)
         return ungettext('%s record', '%s records', length) % length
 
     def title(self):
@@ -66,11 +64,18 @@ class StatsdPanel(DebugPanel):
 
     def content(self):
         context = self.context.copy()
-        config = getattr(settings, 'TOOLBAR_STATSD', {})
+        config = getattr(settings, 'TOOLBAR_METLOG', {})
         if 'roots' in config:
             for key in ['timers', 'counts']:
                 context[key] = config['roots'][key]
+
+        # TODO(vng): this needs to dip into the DebugCaptureSender
+        # to extract all the properties
+        # The existing code assumes that the statsd client is using
+        # the django_statsd.clients.toolbar.StatsClient instance which
+        # just captures timers and stores them for the toolbar
         context['graphite'] = config.get('graphite')
-        context['statsd'] = munge(self.statsd.cache)
-        context['timings'] = times(self.statsd.timings)
+        context['statsd'] = munge(self.metlog_client.cache)
+        context['timings'] = times(self.metlog_client.timings)
         return render_to_string('toolbar_statsd/statsd.html', context)
+

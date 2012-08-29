@@ -3,7 +3,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from django_statsd.clients import statsd
+from django_statsd.clients import metlog_client
 
 
 class Command(BaseCommand):
@@ -20,4 +20,4 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **kw):
-        statsd.timing(kw.get('key'), time.time())
+        metlog_client.timer_send(kw.get('key'), time.time())
