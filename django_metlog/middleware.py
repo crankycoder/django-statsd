@@ -1,4 +1,5 @@
-from django_statsd.clients import metlog_client
+from django.conf import settings
+metlog = settings.METLOG
 import inspect
 import time
 
@@ -6,15 +7,15 @@ import time
 class GraphiteMiddleware(object):
 
     def process_response(self, request, response):
-        metlog_client.incr('response.%s' % response.status_code)
+        metlog.incr('response.%s' % response.status_code)
         if hasattr(request, 'user') and request.user.is_authenticated():
-            metlog_client.incr('response.auth.%s' % response.status_code)
+            metlog.incr('response.auth.%s' % response.status_code)
         return response
 
     def process_exception(self, request, exception):
-        metlog_client.incr('response.500')
+        metlog.incr('response.500')
         if hasattr(request, 'user') and request.user.is_authenticated():
-            metlog_client.incr('response.auth.500')
+            metlog.incr('response.auth.500')
 
 
 class GraphiteRequestTimingMiddleware(object):
@@ -43,6 +44,6 @@ class GraphiteRequestTimingMiddleware(object):
             ms = int((time.time() - request._start_time) * 1000)
             data = dict(module=request._view_module, name=request._view_name,
                         method=request.method)
-            metlog_client.timer_send('view.{module}.{name}.{method}'.format(**data), ms)
-            metlog_client.timer_send('view.{module}.{method}'.format(**data), ms)
-            metlog_client.timer_send('view.{method}'.format(**data), ms)
+            metlog.timer_send('view.{module}.{name}.{method}'.format(**data), ms)
+            metlog.timer_send('view.{module}.{method}'.format(**data), ms)
+            metlog.timer_send('view.{method}'.format(**data), ms)

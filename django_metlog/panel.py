@@ -3,7 +3,7 @@ from django.template.loader import render_to_string
 from django.utils.translation import ugettext_lazy as _, ungettext
 
 from debug_toolbar.panels import DebugPanel
-from django_statsd.clients import metlog_client
+metlog = settings.METLOG
 
 
 def munge(stats):
@@ -47,13 +47,13 @@ class MetlogPanel(DebugPanel):
 
     def __init__(self, *args, **kw):
         super(MetlogPanel, self).__init__(*args, **kw)
-        self.metlog_client = metlog_client
+        self.metlog = metlog
 
     def nav_title(self):
         return _('metlog')
 
     def nav_subtitle(self):
-        length = len(self.metlog_client.cache) + len(self.metlog_client.timings)
+        length = len(self.metlog.cache) + len(self.metlog.timings)
         return ungettext('%s record', '%s records', length) % length
 
     def title(self):
@@ -75,7 +75,12 @@ class MetlogPanel(DebugPanel):
         # the django_statsd.clients.toolbar.StatsClient instance which
         # just captures timers and stores them for the toolbar
         context['graphite'] = config.get('graphite')
-        context['statsd'] = munge(self.metlog_client.cache)
-        context['timings'] = times(self.metlog_client.timings)
+
+        # cache is a dictionary of statname -> [(count, rate), ...]
+        context['statsd'] = munge(self.metlog.cache)
+
+        # timings is a list of [(stat, now, delta, now+delta), ...]
+        # where now = time.time()*1000
+        context['timings'] = times(self.metlog.timings)
         return render_to_string('toolbar_statsd/statsd.html', context)
 

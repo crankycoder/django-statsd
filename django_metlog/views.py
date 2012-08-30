@@ -1,9 +1,9 @@
 from django import http
 from django.conf import settings
+metlog = settings.METLOG
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-metlog_client = settings.METLOG_CLIENT
 
 boomerang = {
  'window.performance.navigation.redirectCount': 'nt_red_cnt',
@@ -53,11 +53,11 @@ def process_key(start, key, value):
         # Some values will be zero. We want the output of that to
         # be zero relative to start.
         value = max(start, int(value)) - start
-        metlog_client.timer(key, value)
+        metlog.timer(key, value)
     elif key == 'window.performance.navigation.type':
-        metlog_client.incr('%s.%s' % (key, types[value]))
+        metlog.incr('%s.%s' % (key, types[value]))
     elif key == 'window.performance.navigation.redirectCount':
-        metlog_client.incr(key, int(value))
+        metlog.incr(key, int(value))
 
 
 def _process_summaries(start, keys):
@@ -73,7 +73,7 @@ def _process_summaries(start, keys):
     for k, v in calculated.items():
         # If loadEventEnd still does not get populated, we could end up with
         # negative numbers here.
-        metlog_client.timer('window.performance.calculated.%s' % k, max(v, 0))
+        metlog.timer('window.performance.calculated.%s' % k, max(v, 0))
 
 
 @require_http_methods(['GET', 'HEAD'])
@@ -104,7 +104,8 @@ def _process_boomerang(request):
 
 @require_http_methods(['POST'])
 def _process_stick(request):
-    start = request.POST.get('window.performance.timing.navigationStart', None)
+    #start = request.POST.get('window.performance.timing.navigationStart', None)
+    start=0
     if not start:
         return http.HttpResponseBadRequest()
 
@@ -158,6 +159,8 @@ def record(request):
         if result:
             return result
 
+    import pdb
+    pdb.set_trace()
     try:
         response = clients[client](request)
     except (ValueError, KeyError):

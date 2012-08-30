@@ -1,7 +1,7 @@
 from django.core import cache
 from django.core.cache.backends.base import BaseCache
 
-from django_statsd.patches.utils import wrap
+from django_metlog.patches.utils import wrap
 
 
 def key(cache, attr):

@@ -11,7 +11,6 @@ minimal = {
         }
     },
     'ROOT_URLCONF':'',
-    'STATSD_CLIENT': 'django_statsd.clients.null'
 }
 
 if not settings.configured:
@@ -26,7 +25,6 @@ from django.utils import unittest
 
 import mock
 from nose.tools import eq_
-from django_statsd.clients import get_client
 from django_statsd import middleware
 
 cfg = {
@@ -108,31 +106,6 @@ class TestTiming(unittest.TestCase):
                  'view.GET']
         for expected, (args, kwargs) in zip(names, timing.call_args_list):
             eq_(expected, args[0])
-
-
-class TestClient(unittest.TestCase):
-
-    @mock.patch.object(settings, 'STATSD_CLIENT', 'statsd.client')
-    def test_normal(self):
-        eq_(get_client().__module__, 'statsd.client')
-
-    @mock.patch.object(settings, 'STATSD_CLIENT',
-                       'django_statsd.clients.null')
-    def test_null(self):
-        eq_(get_client().__module__, 'django_statsd.clients.null')
-
-    @mock.patch.object(settings, 'STATSD_CLIENT',
-                       'django_statsd.clients.toolbar')
-    def test_toolbar(self):
-        eq_(get_client().__module__, 'django_statsd.clients.toolbar')
-
-    @mock.patch.object(settings, 'STATSD_CLIENT',
-                       'django_statsd.clients.toolbar')
-    def test_toolbar_send(self):
-        client = get_client()
-        eq_(client.cache, {})
-        client.incr('testing')
-        eq_(client.cache, {'testing|count': [[1, 1]]})
 
 
 # This is primarily for Zamboni, which loads in the custom middleware
