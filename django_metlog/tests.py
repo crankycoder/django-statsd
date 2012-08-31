@@ -194,25 +194,3 @@ class TestRecord(TestCase):
         data = self.stick.copy()
         data['window.performance.navigation.type'] = '<alert>'
         assert self.client.post(self.url, data).status_code == 400
-
-
-@mock.patch.object(middleware.statsd, 'incr')
-class TestErrorLog(TestCase):
-
-    def setUp(self):
-        dictconfig.dictConfig(cfg)
-        self.log = logging.getLogger('test.logging')
-
-    def division_error(self):
-        try:
-            1 / 0
-        except:
-            return sys.exc_info()
-
-    def test_emit(self, incr):
-        self.log.error('blargh!', exc_info=self.division_error())
-        assert incr.call_args[0][0] == 'error.zerodivisionerror'
-
-    def test_not_emit(self, incr):
-        self.log.error('blargh!')
-        assert not incr.called
