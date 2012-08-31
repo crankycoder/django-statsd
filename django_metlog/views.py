@@ -104,8 +104,7 @@ def _process_boomerang(request):
 
 @require_http_methods(['POST'])
 def _process_stick(request):
-    #start = request.POST.get('window.performance.timing.navigationStart', None)
-    start=0
+    start = request.POST.get('window.performance.timing.navigationStart', None)
     if not start:
         return http.HttpResponseBadRequest()
 

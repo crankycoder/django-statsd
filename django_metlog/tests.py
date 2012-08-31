@@ -1,7 +1,5 @@
-import logging
-import sys
-
 from django.conf import settings
+from django.test.utils import override_settings
 
 minimal = {
     'DATABASES': {
@@ -10,7 +8,7 @@ minimal = {
             'NAME': 'mydatabase'
         }
     },
-    'ROOT_URLCONF':'',
+    'ROOT_URLCONF': '',
 }
 
 if not settings.configured:
@@ -20,31 +18,19 @@ from django.core.urlresolvers import reverse
 from django.http import HttpResponse, HttpResponseForbidden
 from django.test import TestCase
 from django.test.client import RequestFactory
-from django.utils import dictconfig
 from django.utils import unittest
 
 import mock
 from nose.tools import eq_
-from django_statsd import middleware
+from django_metlog import middleware
 
-cfg = {
-    'version': 1,
-    'formatters': {},
-    'handlers': {
-        'test_statsd_handler': {
-            'class': 'django_statsd.loggers.errors.StatsdHandler',
-        },
-    },
-    'loggers': {
-        'test.logging': {
-            'handlers': ['test_statsd_handler'],
-        },
-    },
-}
+cfg_txt = """
+[metlog]
+sender_class = metlog.senders.DebugCaptureSender
+"""
 
 
-
-@mock.patch.object(middleware.statsd, 'incr')
+@mock.patch.object(middleware.metlog, 'incr')
 class TestIncr(TestCase):
 
     def setUp(self):
@@ -76,7 +62,7 @@ class TestIncr(TestCase):
         eq_(incr.call_count, 2)
 
 
-@mock.patch.object(middleware.statsd, 'timing')
+@mock.patch.object(middleware.metlog, 'timer_send')
 class TestTiming(unittest.TestCase):
 
     def setUp(self):
@@ -113,14 +99,16 @@ class TestTiming(unittest.TestCase):
 @mock.patch.object(settings, 'MIDDLEWARE_CLASSES', [])
 class TestRecord(TestCase):
 
-    urls = 'django_statsd.urls'
+    urls = 'django_metlog.urls'
 
     def setUp(self):
         super(TestRecord, self).setUp()
-        self.url = reverse('django_statsd.record')
+        self.url = reverse('django_metlog.record')
         settings.STATSD_RECORD_GUARD = None
         self.good = {'client': 'boomerang', 'nt_nav_st': 1,
                      'nt_domcomp': 3}
+
+        # Note that 'stick' timings must use HTTP POST
         self.stick = {'client': 'stick',
                       'window.performance.timing.domComplete': 123,
                       'window.performance.timing.domInteractive': 456,
@@ -140,11 +128,11 @@ class TestRecord(TestCase):
                                {'client': 'boomerang'}).status_code == 400
 
     def test_boomerang_minimum(self):
-        assert self.client.get(self.url,
+        eq_(self.client.get(self.url,
                                {'client': 'boomerang',
-                                'nt_nav_st': 1}).content == 'recorded'
+                                'nt_nav_st': 1}).content, 'recorded')
 
-    @mock.patch('django_statsd.views.process_key')
+    @mock.patch('django_metlog.views.process_key')
     def test_boomerang_something(self, process_key):
         assert self.client.get(self.url, self.good).content == 'recorded'
         assert process_key.called
@@ -161,9 +149,10 @@ class TestRecord(TestCase):
         assert self.client.get(self.url, self.good).status_code == 403
 
     def test_stick_get(self):
-        assert self.client.get(self.url, self.stick).status_code == 405
+        resp = self.client.get(self.url, self.stick)
+        eq_(resp.status_code, 405)
 
-    @mock.patch('django_statsd.views.process_key')
+    @mock.patch('django_metlog.views.process_key')
     def test_stick(self, process_key):
         assert self.client.post(self.url, self.stick).status_code == 200
         assert process_key.called
@@ -173,7 +162,7 @@ class TestRecord(TestCase):
         del data['window.performance.timing.navigationStart']
         assert self.client.post(self.url, data).status_code == 400
 
-    @mock.patch('django_statsd.views.process_key')
+    @mock.patch('django_metlog.views.process_key')
     def test_stick_missing(self, process_key):
         data = self.stick.copy()
         del data['window.performance.timing.domInteractive']
