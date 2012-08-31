@@ -159,8 +159,6 @@ def record(request):
         if result:
             return result
 
-    import pdb
-    pdb.set_trace()
     try:
         response = clients[client](request)
     except (ValueError, KeyError):
