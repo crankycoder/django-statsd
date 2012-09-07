@@ -1,9 +1,10 @@
-from django_statsd.clients import statsd
+from django.conf import settings
+metlog = settings.METLOG
 from functools import partial
 
 
 def wrapped(method, key, *args, **kw):
-    with statsd.timer(key):
+    with metlog.timer(key):
         return method(*args, **kw)
 
 

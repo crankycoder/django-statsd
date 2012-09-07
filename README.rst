@@ -1,13 +1,10 @@
-Django Statsd
+Django Metlog
 =============
 
-Integration between statsd and django. It allows you to use different clients,
-sends timings as middleware and integrates with django debug toolbar.
+Integration between django and django. This is a port of Django Statsd (http://github.com/andym/django-statsd)
+that uses metlog instead of a statsd client to send metrics.
 
-Credits:
+The code assumes that you have a METLOG client instantiated and
+configured in your django.conf.settings file.
 
-- jbalogh and jsocol for statsd and commonware, which I just ripped parts out
-  of and put in here.
-- robhudson for django-debug-toolbar
-
-For more see our docs at: http://readthedocs.org/docs/django-statsd/en/latest/
+more see our docs at: http://django-metlog.readthedocs.org/

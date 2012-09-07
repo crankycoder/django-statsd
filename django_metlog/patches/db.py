@@ -1,6 +1,6 @@
 from django.db.backends import util
 
-from django_statsd.patches.utils import wrap
+from django_metlog.patches.utils import wrap
 
 
 def key(db, attr):
