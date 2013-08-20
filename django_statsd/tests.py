@@ -139,6 +139,164 @@ class TestClient(unittest.TestCase):
         eq_(client.cache, {'testing|count': [[1, 1]]})
 
 
+class TestHekaClient(TestCase):
+
+    def check_heka(self):
+        try:
+            from heka.config import client_from_dict_config
+            return client_from_dict_config
+        except ImportError:
+            raise SkipTest("Heka is not installed")
+
+    @nose_tools.raises(AttributeError)
+    def test_no_heka(self):
+        with self.settings(STATSD_PREFIX='moz_heka',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            get_client()
+
+    def _create_client(self):
+        client_from_dict_config = self.check_heka()
+
+        # Need to load within the test in case heka is not installed
+        from heka.config import client_from_dict_config
+
+        HEKA_CONF = {
+            'logger': 'django-statsd',
+            'stream': {
+                'class': 'heka.streams.DebugCaptureStream',
+            },
+        }
+
+        return client_from_dict_config(HEKA_CONF)
+
+    def test_get_client(self):
+        heka = self._create_client()
+        with self.settings(HEKA=heka,
+                           STATSD_PREFIX='moz_heka',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            eq_(client.__module__, 'django_statsd.clients.moz_metlog')
+
+    def test_heka_incr(self):
+        heka = self._create_client()
+        with self.settings(HEKA=heka,
+                           STATSD_PREFIX='moz_heka',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            eq_(len(client.client.sender.stream.msgs), 0)
+            client.incr('testing')
+            eq_(len(client.client.sender.stream.msgs), 1)
+
+            msg = json.loads(client.client.sender.stream.msgs[0][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '1')
+            eq_(msg['type'], 'counter')
+
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 1)
+            eq_(name['value_string'][0], 'moz_heka.testing')
+
+
+    def test_heka_decr(self):
+        heka = self._create_client()
+        with self.settings(HEKA=heka,
+                           STATSD_PREFIX='moz_heka',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            eq_(len(client.client.sender.stream.msgs), 0)
+            client.decr('testing')
+            eq_(len(client.client.sender.stream.msgs), 1)
+
+            msg = json.loads(client.client.sender.stream.msgs[0][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '-1')
+            eq_(msg['type'], 'counter')
+
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 1)
+            eq_(name['value_string'][0], 'moz_heka.testing')
+
+    def test_heka_timing(self):
+        heka = self._create_client()
+        with self.settings(HEKA=heka,
+                           STATSD_PREFIX='moz_heka',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            eq_(len(client.client.sender.stream.msgs), 0)
+            client.timing('testing', 512, rate=2)
+            eq_(len(client.client.sender.stream.msgs), 1)
+
+            msg = json.loads(client.client.sender.stream.msgs[0][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '512')
+
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 2)
+            eq_(name['value_string'][0], 'moz_heka.testing')
+
+
+            eq_(msg['type'], 'timer')
+
+    @nose_tools.raises(AttributeError)
+    def test_heka_no_prefixes(self):
+        heka = self._create_client()
+
+        with self.settings(HEKA=heka,
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            client.incr('foo', 2)
+            
+    def test_heka_prefixes(self):
+        heka = self._create_client()
+
+        with self.settings(HEKA=heka,
+                           STATSD_PREFIX='some_prefix',
+                           STATSD_CLIENT='django_statsd.clients.moz_metlog'):
+            client = get_client()
+            eq_(len(client.client.sender.stream.msgs), 0)
+
+            client.timing('testing', 512, rate=2)
+            client.incr('foo', 2)
+            client.decr('bar', 5)
+
+            eq_(len(client.client.sender.stream.msgs), 3)
+
+            msg = json.loads(client.client.sender.stream.msgs[0][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '512')
+
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 2)
+            eq_(name['value_string'][0], 'some_prefix.testing')
+
+
+            eq_(msg['type'], 'timer')
+
+            msg = json.loads(client.client.sender.stream.msgs[1][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '2')
+
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 1)
+            eq_(name['value_string'][0], 'some_prefix.foo')
+
+            eq_(msg['type'], 'counter')
+
+            msg = json.loads(client.client.sender.stream.msgs[2][8:])
+            eq_(msg['severity'], 6)
+            eq_(msg['payload'], '-5')
+            rate = [f for f in msg['fields'] if f['name'] == 'rate'][0]
+            name = [f for f in msg['fields'] if f['name'] == 'name'][0]
+            eq_(rate['value_integer'][0], 1)
+            eq_(name['value_string'][0], 'some_prefix.bar')
+            eq_(msg['type'], 'counter')
+
+
 class TestMetlogClient(TestCase):
 
     def check_metlog(self):
@@ -183,11 +341,11 @@ class TestMetlogClient(TestCase):
                            STATSD_PREFIX='moz_metlog',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(len(client.metlog.sender.msgs), 0)
+            eq_(len(client.client.sender.msgs), 0)
             client.incr('testing')
-            eq_(len(client.metlog.sender.msgs), 1)
+            eq_(len(client.client.sender.msgs), 1)
 
-            msg = json.loads(client.metlog.sender.msgs[0])
+            msg = json.loads(client.client.sender.msgs[0])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '1')
             eq_(msg['fields']['rate'], 1)
@@ -200,11 +358,11 @@ class TestMetlogClient(TestCase):
                            STATSD_PREFIX='moz_metlog',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(len(client.metlog.sender.msgs), 0)
+            eq_(len(client.client.sender.msgs), 0)
             client.decr('testing')
-            eq_(len(client.metlog.sender.msgs), 1)
+            eq_(len(client.client.sender.msgs), 1)
 
-            msg = json.loads(client.metlog.sender.msgs[0])
+            msg = json.loads(client.client.sender.msgs[0])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '-1')
             eq_(msg['fields']['rate'], 1)
@@ -217,11 +375,11 @@ class TestMetlogClient(TestCase):
                            STATSD_PREFIX='moz_metlog',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(len(client.metlog.sender.msgs), 0)
+            eq_(len(client.client.sender.msgs), 0)
             client.timing('testing', 512, rate=2)
-            eq_(len(client.metlog.sender.msgs), 1)
+            eq_(len(client.client.sender.msgs), 1)
 
-            msg = json.loads(client.metlog.sender.msgs[0])
+            msg = json.loads(client.client.sender.msgs[0])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '512')
             eq_(msg['fields']['rate'], 2)
@@ -244,29 +402,29 @@ class TestMetlogClient(TestCase):
                            STATSD_PREFIX='some_prefix',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(len(client.metlog.sender.msgs), 0)
+            eq_(len(client.client.sender.msgs), 0)
 
             client.timing('testing', 512, rate=2)
             client.incr('foo', 2)
             client.decr('bar', 5)
 
-            eq_(len(client.metlog.sender.msgs), 3)
+            eq_(len(client.client.sender.msgs), 3)
 
-            msg = json.loads(client.metlog.sender.msgs[0])
+            msg = json.loads(client.client.sender.msgs[0])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '512')
             eq_(msg['fields']['rate'], 2)
             eq_(msg['fields']['name'], 'some_prefix.testing')
             eq_(msg['type'], 'timer')
 
-            msg = json.loads(client.metlog.sender.msgs[1])
+            msg = json.loads(client.client.sender.msgs[1])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '2')
             eq_(msg['fields']['rate'], 1)
             eq_(msg['fields']['name'], 'some_prefix.foo')
             eq_(msg['type'], 'counter')
 
-            msg = json.loads(client.metlog.sender.msgs[2])
+            msg = json.loads(client.client.sender.msgs[2])
             eq_(msg['severity'], 6)
             eq_(msg['payload'], '-5')
             eq_(msg['fields']['rate'], 1)
