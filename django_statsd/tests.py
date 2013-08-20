@@ -175,7 +175,7 @@ class TestHekaClient(TestCase):
                            STATSD_PREFIX='moz_heka',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(client.__module__, 'django_statsd.clients.moz_metlog')
+            eq_(client.__module__, 'django_statsd.clients.moz_heka')
 
     def test_heka_incr(self):
         heka = self._create_client()
@@ -333,7 +333,7 @@ class TestMetlogClient(TestCase):
                            STATSD_PREFIX='moz_metlog',
                            STATSD_CLIENT='django_statsd.clients.moz_metlog'):
             client = get_client()
-            eq_(client.__module__, 'django_statsd.clients.moz_metlog')
+            eq_(client.__module__, 'django_statsd.clients.moz_heka')
 
     def test_metlog_incr(self):
         metlog = self._create_client()
